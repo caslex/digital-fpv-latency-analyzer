@@ -10,7 +10,7 @@
           @dragenter.prevent.stop
           @dragover.prevent.stop
         >
-          Drag and Drop your SRT and/or MP4 files here.
+          Drag and Drop your DJI/Avatar SRT, OpenTX CSV and MP4 files here.
         </div>
         <div class="videoWrapper">
           <video ref="video"></video>
