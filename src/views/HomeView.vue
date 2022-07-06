@@ -18,6 +18,8 @@
         </div>
         <button class="btn btn-primary me-2" @click="playVideo">Play</button>
         <button class="btn btn-secondary" @click="pauseVideo">Pause</button>
+        <br />
+        OpenTX Offset [s]: <input type="number" v-model.number="openTxOffset" />
         <hr />
         <h3>Statistics</h3>
         <pre>
@@ -58,6 +60,8 @@ stdev bitrate: {{ stdevBitrate }}
 import Vue3ChartJs from "@j-t-mcc/vue3-chartjs";
 import "chartjs-adapter-date-fns";
 import zoomPlugin from "chartjs-plugin-zoom";
+import parse from "date-fns/parse";
+import format from "date-fns/format";
 Vue3ChartJs.registerGlobalPlugins([zoomPlugin]);
 
 export default {
@@ -81,6 +85,9 @@ export default {
       subtitleTimes: [],
       videoInterval: null,
       currentSubtitle: "",
+      openTxData: [],
+      openTxOffset: 0,
+      firstInit: true,
       scrubStyle: {
         inset: "0 auto 100% 0",
       },
@@ -92,6 +99,7 @@ export default {
           datasets: [],
         },
         options: {
+          animation: false,
           ticks: {
             source: "data",
           },
@@ -133,6 +141,7 @@ export default {
           datasets: [],
         },
         options: {
+          animation: false,
           plugins: {},
           scales: {
             y: {
@@ -149,6 +158,7 @@ export default {
           datasets: [],
         },
         options: {
+          animation: false,
           plugins: {},
           scales: {
             y: {
@@ -189,36 +199,96 @@ export default {
     Vue3ChartJs,
   },
   watch: {
-    subtitles: {
+    /*subtitles: {
       deep: true,
       handler() {
-        if (this.subtitleTimes.length === 0) return [];
+        this.handleDataChange();
+      },
+    },
+    openTxData: {
+      deep: true,
+      handler() {
+        this.handleDataChange();
+      },
+    },*/
+    openTxOffset: {
+      deep: true,
+      handler() {
+        this.handleDataChange();
+      },
+    },
+  },
+  mounted() {
+    this.videoInterval = window.setInterval(() => {
+      const currentTime = this.$refs.video.currentTime;
+      const subtitle = this.findSubtitle(currentTime);
+      if (subtitle !== null) {
+        this.currentSubtitle = subtitle.text;
+      }
+
+      const xPixel = Math.max(
+        this.$refs.chart?.chartJSState?.chart?.scales?.x.getPixelForValue(
+          currentTime * 1000
+        ),
+        0
+      );
+      const top = this.$refs.chart?.chartJSState?.chart?.scales?.y?.top;
+      const bottom =
+        this.$refs.chart?.chartJSState?.chart?.height -
+        this.$refs.chart?.chartJSState?.chart?.scales?.y?.bottom;
+      this.scrubStyle.inset = `${top}px auto ${bottom}px ${xPixel}px`;
+    }, 100);
+    document.onkeydown = this.checkKey;
+  },
+  beforeUnmount() {
+    if (this.videoInterval !== null) {
+      window.clearInterval(this.videoInterval);
+      this.videoInterval = null;
+    }
+    document.onkeydown = null;
+  },
+  methods: {
+    handleDataChange() {
+      let shownByDefault = ["delay", "bitrate", "distance"];
+      if (!this.firstInit) {
+        shownByDefault = this.$refs.chart.chartJSState.chart.legend.legendItems
+          .filter((l) => l.hidden === false)
+          .map((l) => l.text);
+      }
+      this.firstInit = false;
+
+      this.lineChart.data.datasets.splice(0);
+      this.lineChart.data.labels.splice(0);
+      const colors = [
+        "#000000",
+        "#004949",
+        "#009292",
+        "#ff6db6",
+        "#ffb6db",
+        "#490092",
+        "#006ddb",
+        "#b66dff",
+        "#6db6ff",
+        "#b6dbff",
+        "#920000",
+        "#924900",
+        "#db6d00",
+        "#24ff24",
+        "#ffff6d",
+      ];
+      let subtitleDuration = null;
+
+      if (this.subtitleTimes.length > 0) {
+        subtitleDuration = Math.max(...this.subtitleTimes);
         const dataProps = Object.keys(
           this.subtitles[this.subtitleTimes[0]].data
         );
+
         const datasets = [];
-        const colors = [
-          "#000000",
-          "#004949",
-          "#009292",
-          "#ff6db6",
-          "#ffb6db",
-          "#490092",
-          "#006ddb",
-          "#b66dff",
-          "#6db6ff",
-          "#b6dbff",
-          "#920000",
-          "#924900",
-          "#db6d00",
-          "#24ff24",
-          "#ffff6d",
-        ];
-        const shownByDefault = ["delay", "bitrate", "distance"];
         for (const [i, dataProp] of dataProps.entries()) {
           datasets.push({
             label: dataProp,
-            borderColor: colors[i],
+            borderColor: colors[i % (colors.length - 1)],
             hidden: !shownByDefault.includes(dataProp),
             data: this.subtitleTimes.map((s) => ({
               x: this.subtitles[s].startSeconds * 1000,
@@ -227,11 +297,8 @@ export default {
           });
         }
 
-        this.lineChart.data.datasets.splice(0);
-        this.lineChart.data.labels.splice(0);
         this.lineChart.data.datasets.push(...datasets);
         this.lineChart.data.labels.push(...this.subtitleTimes);
-        this.$refs.chart.update();
 
         // Delay data
         const delays = Object.values(this.subtitles)
@@ -278,39 +345,41 @@ export default {
           data: buckets,
         });
         this.$refs.delayHistogramChart.update();
-      },
-    },
-  },
-  mounted() {
-    this.videoInterval = window.setInterval(() => {
-      const currentTime = this.$refs.video.currentTime;
-      const subtitle = this.findSubtitle(currentTime);
-      if (subtitle !== null) {
-        this.currentSubtitle = subtitle.text;
       }
 
-      const xPixel = Math.max(
-        this.$refs.chart?.chartJSState?.chart?.scales?.x.getPixelForValue(
-          currentTime * 1000
-        ),
-        0
-      );
-      const top = this.$refs.chart?.chartJSState?.chart?.scales?.y?.top;
-      const bottom =
-        this.$refs.chart?.chartJSState?.chart?.height -
-        this.$refs.chart?.chartJSState?.chart?.scales?.y?.bottom;
-      this.scrubStyle.inset = `${top}px auto ${bottom}px ${xPixel}px`;
-    }, 100);
-    document.onkeydown = this.checkKey;
-  },
-  beforeUnmount() {
-    if (this.videoInterval !== null) {
-      window.clearInterval(this.videoInterval);
-      this.videoInterval = null;
-    }
-    document.onkeydown = null;
-  },
-  methods: {
+      if (this.openTxData.length > 0) {
+        const datasets = [];
+        const headers = Object.keys(this.openTxData[0].raw);
+
+        for (const [idxHeader, header] of headers.entries()) {
+          const entries = [];
+          for (const openTxData of this.openTxData) {
+            const timeSinceStart =
+              openTxData.timeSinceStart + this.openTxOffset;
+            if (timeSinceStart < 0) continue;
+            if (subtitleDuration !== null) {
+              if (timeSinceStart > subtitleDuration) break;
+            }
+            entries.push({
+              x: timeSinceStart * 1000,
+              y: openTxData.raw[header],
+            });
+          }
+          const dataName = `TX ${header}`;
+          datasets.push({
+            label: dataName,
+            borderColor: colors[idxHeader % (colors.length - 1)],
+            hidden: !shownByDefault.includes(dataName),
+            data: entries,
+          });
+        }
+
+        this.lineChart.data.datasets.push(...datasets);
+        this.lineChart.data.labels.push(...headers);
+      }
+
+      this.$refs.chart.update(1);
+    },
     mean(arr) {
       const tot = arr.reduce((a, b) => a + b, 0);
       return tot / arr.length || 0;
@@ -341,16 +410,23 @@ export default {
           event?.chartRef?.value?.chartJSState?.chart?.scales?.x.bottom;
       }
     },
-    dropped(dropEvent) {
-      if (dropEvent?.dataTransfer?.files?.length > 0) {
-        for (let i = 0; i < dropEvent.dataTransfer.files.length; i++) {
+    async dropped(dropEvent) {
+      const numFiles = dropEvent?.dataTransfer?.files?.length;
+      if (numFiles > 0) {
+        const promises = [];
+        for (let i = 0; i < numFiles; i++) {
           const file = dropEvent.dataTransfer.files[i];
           if (this.getExtension(file.name) === "mp4") {
             this.readVideo(file);
           } else if (this.getExtension(file.name) === "srt") {
-            this.readSubtitle(file);
+            promises.push(this.readSubtitle(file));
+          } else if (this.getExtension(file.name) === "csv") {
+            promises.push(this.readOpenTx(file));
           }
         }
+        await Promise.all(promises).then(() => {
+          this.handleDataChange();
+        });
       }
     },
     readVideo(file) {
@@ -366,13 +442,28 @@ export default {
       reader.readAsDataURL(file);
     },
     readSubtitle(file) {
-      const reader = new FileReader();
-      reader.onloadend = (loadendEvent) => {
-        if (loadendEvent.target.readyState === FileReader.DONE) {
-          this.parseSubtitle(reader);
-        }
-      };
-      reader.readAsText(file);
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = (loadendEvent) => {
+          if (loadendEvent.target.readyState === FileReader.DONE) {
+            this.parseSubtitle(reader);
+            resolve();
+          }
+        };
+        reader.readAsText(file);
+      });
+    },
+    readOpenTx(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = (loadendEvent) => {
+          if (loadendEvent.target.readyState === FileReader.DONE) {
+            this.parseOpenTx(reader);
+            resolve();
+          }
+        };
+        reader.readAsText(file);
+      });
     },
     parseSubtitle(reader) {
       this.subtitles = {};
@@ -449,6 +540,43 @@ export default {
         }
       }
       this.subtitleTimes.sort((a, b) => a - b);
+    },
+    parseOpenTx(reader) {
+      const csvLines = reader.result.split("\n");
+      const headerLine = csvLines.shift();
+      const headers = headerLine.split(",");
+      const openTxData = [];
+      let firstStart = null;
+      for (const [idxCsvLine, csvLine] of csvLines.entries()) {
+        const csvData = csvLine.split(",");
+        if (csvData.length !== headers.length) continue;
+        const data = {
+          raw: {},
+        };
+
+        for (const [idx, header] of headers.entries()) {
+          data.raw[header] = csvData[idx];
+        }
+
+        // Set relative time
+        const entryTime = format(
+          parse(
+            `${data.raw["Date"]} ${data.raw["Time"]}`,
+            "yyyy-MM-dd HH:mm:ss.SSS",
+            new Date()
+          ),
+          "t"
+        );
+        if (idxCsvLine === 0) {
+          data.timeSinceStart = 0;
+          firstStart = entryTime;
+        } else {
+          data.timeSinceStart = entryTime - firstStart;
+        }
+
+        openTxData.push(data);
+      }
+      this.openTxData = openTxData;
     },
     findSubtitle(seconds) {
       let subtitle = null;
