@@ -20,6 +20,8 @@
         <button class="btn btn-secondary" @click="pauseVideo">Pause</button>
         <br />
         OpenTX Offset [s]: <input type="number" v-model.number="openTxOffset" />
+        <br />
+        Log Scale: <input type="checkbox" v-model="logScale" />
         <hr />
         <h3>Statistics</h3>
         <pre>
@@ -88,6 +90,7 @@ export default {
       openTxData: [],
       openTxOffset: 0,
       firstInit: true,
+      logScale: true,
       scrubStyle: {
         inset: "0 auto 100% 0",
       },
@@ -124,6 +127,8 @@ export default {
             },
             y: {
               type: "logarithmic",
+              beginAtZero: true,
+              min: 0,
             },
           },
           plugins: {
@@ -146,6 +151,7 @@ export default {
           scales: {
             y: {
               type: "logarithmic",
+              beginAtZero: true,
             },
           },
         },
@@ -163,6 +169,7 @@ export default {
           scales: {
             y: {
               type: "logarithmic",
+              beginAtZero: true,
             },
           },
         },
@@ -215,6 +222,17 @@ export default {
       deep: true,
       handler() {
         this.handleDataChange();
+      },
+    },
+    logScale: {
+      deep: true,
+      handler(val) {
+        if (val) {
+          this.lineChart.options.scales.y.type = "logarithmic";
+        } else {
+          this.lineChart.options.scales.y.type = "linear";
+        }
+        this.$refs.chart.update(0);
       },
     },
   },
@@ -362,7 +380,7 @@ export default {
             }
             entries.push({
               x: timeSinceStart * 1000,
-              y: openTxData.raw[header],
+              y: parseFloat(openTxData.raw[header]),
             });
           }
           const dataName = `TX ${header}`;
@@ -378,7 +396,18 @@ export default {
         this.lineChart.data.labels.push(...headers);
       }
 
-      this.$refs.chart.update(1);
+      // 0 => 0.00001 because log(0) is undefined - sorry
+      /*
+      for (const dataset of this.lineChart.data.datasets) {
+        for (const data of dataset.data) {
+          if (data.y === 0) {
+            data.y = 0.00001;
+          }
+        }
+      }
+      */
+
+      this.$refs.chart.update(0);
     },
     mean(arr) {
       const tot = arr.reduce((a, b) => a + b, 0);
