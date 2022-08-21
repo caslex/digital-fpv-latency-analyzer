@@ -1,4 +1,4 @@
-<script setup lang="ts"></script>
+<script setup></script>
 
 <template>
   <main>
@@ -32,7 +32,8 @@ avg bitrate: {{ avgBitrate }}
 median bitrate: {{ medBitrate }}
 stdev bitrate: {{ stdevBitrate }}
         </pre>
-        <small>by caslex</small>
+        <small>by caslex</small><br>
+        <small>❤️ to <a href="https://fpv.wtf/">fpv.wtf</a></small>
       </div>
       <div class="dataCol">
         <div class="chart" ref="chartContainer">
